@@ -6,11 +6,11 @@ const os = require('node:os');
 const assert = require('node:assert/strict');
 const { fakeServer } = require('./fake-server.cjs');
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(),'kata-python-electron-'));
-process.env.KATA_WORKSPACE = path.join(temporary,'workspace');
-process.env.KATA_RUNTIME = path.join(temporary,'runtime');
-fs.mkdirSync(process.env.KATA_WORKSPACE);
+process.env.PYNOTE_WORKSPACE = path.join(temporary,'workspace');
+process.env.PYNOTE_RUNTIME = path.join(temporary,'runtime');
+fs.mkdirSync(process.env.PYNOTE_WORKSPACE);
 const source = '# Python practice\ndef solution(n):\n    return sum(x for x in range(n) if x % 3 == 0 or x % 5 == 0)\n';
-fs.writeFileSync(path.join(process.env.KATA_WORKSPACE,'solution.py'),source);
+fs.writeFileSync(path.join(process.env.PYNOTE_WORKSPACE,'solution.py'),source);
 const script = path.join(temporary,'fake-codex.cjs');
 fs.writeFileSync(script,`#!/usr/bin/env node
 const send = message => process.stdout.write(JSON.stringify(message)+'\\n');
@@ -127,6 +127,6 @@ app.on('browser-window-created',(_,win) => {
   });
 });
 fakeServer(script).then(executable => {
-  process.env.KATA_CODEX = executable;
+  process.env.PYNOTE_CODEX = executable;
   require('../electron/main.cjs');
 }).catch(finish);

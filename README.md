@@ -1,6 +1,6 @@
 # PyNote — Python workspace
 
-`haskell_ide/` の Electron アプリを流用した Python 用 IDE です。元の画面配置、Vim 操作、フォント・配色設定、AI アシスタントを引き継いでいます。元の Haskell アプリは変更していません。
+Electron 製の Python 用 IDE です。Vim 操作、フォント・配色設定、AI アシスタントを備えています。
 
 - 選択したフォルダーの `.py` ファイルを更新日時順に表示し、作成・編集・手動保存。
 - Python の構文ハイライト、4スペースのインデント、ファイル内の単語補完。
@@ -23,7 +23,9 @@ Node.js 22.12 以降、npm、Python 3 が必要です。AI 機能には Codex CL
 Python は Linux / macOS では `python3`、Windows では `python` を使用します。仮想環境を使う場合は、実行ファイルを指定して起動してください。
 
 ```sh
-KATA_PYTHON=/absolute/path/to/.venv/bin/python ./start.sh
+PYNOTE_PYTHON=/absolute/path/to/.venv/bin/python ./start.sh
 ```
+
+`KATA_PYTHON` などの旧 `KATA_*` 環境変数も利用できます。両方が設定されている場合は `PYNOTE_*` を優先します。
 
 操作の詳細は [使い方](docs/usage.md)、設定やテストは [開発ドキュメント](docs/development.md)、macOS アプリの生成は [Mac ビルド](docs/mac-build.md) を参照してください。

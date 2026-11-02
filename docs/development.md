@@ -13,10 +13,12 @@ Node.js 22.12 以降、Python 3 が必要です。AI 通信のテストには偽
 
 | 変数 | 用途 |
 | --- | --- |
-| `KATA_WORKSPACE` | 起動時に開くフォルダー。保存済みの選択より優先 |
-| `KATA_PYTHON` | Python 実行ファイル。既定は Linux/macOS で `python3`、Windows で `python` |
-| `KATA_CODEX` | Codex CLI 実行ファイル。既定は `codex` |
-| `KATA_RUNTIME` | 開発時の設定・キャッシュ保存先。既定は `.runtime/` |
+| `PYNOTE_WORKSPACE` | 起動時に開くフォルダー。保存済みの選択より優先 |
+| `PYNOTE_PYTHON` | Python 実行ファイル。既定は Linux/macOS で `python3`、Windows で `python` |
+| `PYNOTE_CODEX` | Codex CLI 実行ファイル。既定は `codex` |
+| `PYNOTE_RUNTIME` | 開発時の設定・キャッシュ保存先。既定は `.runtime/` |
+
+旧名の `KATA_WORKSPACE`・`KATA_PYTHON`・`KATA_CODEX`・`KATA_RUNTIME`・`KATA_DEV_URL` も互換用に利用できます。対応する `PYNOTE_*` が空でなければそちらを優先します。開発サーバーの URL は `PYNOTE_DEV_URL` で指定します。
 
 ## 構成
 

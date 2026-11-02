@@ -6,8 +6,9 @@ const { Workspace } = require('./workspace.cjs');
 const { WorkspaceServices } = require('./workspace-services.cjs');
 const { restoreWindowState, trackWindowState } = require('./window-state.cjs');
 const root = path.resolve(__dirname, '..');
+const env = name => process.env[`PYNOTE_${name}`] || process.env[`KATA_${name}`];
 if (!app.isPackaged) {
-  const runtime = process.env.KATA_RUNTIME || path.join(root, '.runtime'); fs.mkdirSync(runtime, { recursive:true });
+  const runtime = env('RUNTIME') || path.join(root, '.runtime'); fs.mkdirSync(runtime, { recursive:true });
   app.setPath('userData', runtime); app.setPath('sessionData', runtime);
 }
 // Finder-launched macOS apps do not inherit the interactive shell PATH.
@@ -17,12 +18,12 @@ let serviceTransition = Promise.resolve();
 const emit = event => { if (win && !win.isDestroyed()) win.webContents.send('kata:event', event); };
 app.whenReady().then(async () => {
   nativeTheme.themeSource = 'light';
-  workspace = new Workspace(process.env.KATA_WORKSPACE || (app.isPackaged ? path.join(app.getPath('userData'),'workspace') : path.join(root,'workspace')), app.getPath('userData'), process.env.KATA_WORKSPACE);
+  workspace = new Workspace(env('WORKSPACE') || (app.isPackaged ? path.join(app.getPath('userData'),'workspace') : path.join(root,'workspace')), app.getPath('userData'), env('WORKSPACE'));
   await workspace.init(); store = workspace.store;
   function startServices() {
     services = new WorkspaceServices(store,emit,{
-      pythonExecutable:process.env.KATA_PYTHON || (process.platform === 'win32' ? 'python' : 'python3'),
-      codexExecutable:process.env.KATA_CODEX || 'codex'
+      pythonExecutable:env('PYTHON') || (process.platform === 'win32' ? 'python' : 'python3'),
+      codexExecutable:env('CODEX') || 'codex'
     });
   }
   startServices();
@@ -101,7 +102,7 @@ app.whenReady().then(async () => {
       if (rendererReady) emit({ type:'before-close' });
       else closeWindow().catch(error => console.error(error));
     });
-    if (process.env.KATA_DEV_URL) win.loadURL(process.env.KATA_DEV_URL); else win.loadFile(path.join(root,'dist/index.html'));
+    if (env('DEV_URL')) win.loadURL(env('DEV_URL')); else win.loadFile(path.join(root,'dist/index.html'));
     win.on('closed', () => {
       serviceTransition = serviceTransition.then(() => services.close());
       win = null;

@@ -127,7 +127,7 @@ async function waitFor(predicate, timeout=7000) {
 async function pythonHarness(t) {
   const root=await temporary(t); const store=new Store(root); await store.init();
   const item=await store.create('Solution.py',example); const events=[], output={};
-  const python=new Python(event=>{ events.push(event); if(event.type==='python-data') output[event.id]=(output[event.id] || '')+event.data; },process.env.KATA_PYTHON || 'python3',{ env:{ HOME:root } });
+  const python=new Python(event=>{ events.push(event); if(event.type==='python-data') output[event.id]=(output[event.id] || '')+event.data; },process.env.PYNOTE_PYTHON || 'python3',{ env:{ HOME:root } });
   t.after(()=>python.close());
   python.start(item.id,store.file(item.id)); await waitFor(()=>/>>>/.test(output[item.id] || ''));
   async function send(command,pattern,id=item.id) {
@@ -271,7 +271,7 @@ test('a running Python file accepts input before its first prompt', { timeout:10
 test('explicit Python execution parses current tracebacks, recovers and rejects stale AI results', { timeout:20000 }, async t => {
   const root = await temporary(t), store = new Store(root); await store.init();
   const item = await store.create('日本語.py','answer = 42\n');
-  const events = [], python = new Python(e => events.push(e),process.env.KATA_PYTHON || 'python3');
+  const events = [], python = new Python(e => events.push(e),process.env.PYNOTE_PYTHON || 'python3');
   t.after(() => python.close());
   const diagnostics = new PythonDiagnostics(store,python);
   await store.open(item.id);
