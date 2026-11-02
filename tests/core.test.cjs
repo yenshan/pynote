@@ -289,8 +289,10 @@ test('explicit Python execution parses current tracebacks, recovers and rejects 
   assert.match((await diagnostics.explain(item.id,failure.token,ai)).diagnostics[0].explanation,/ゼロ/);
   await store.save(item.id,'answer = 42\n');
   await assert.rejects(diagnostics.explain(item.id,failure.token,ai),/再読み込み/);
+  const noticeCount = events.filter(e => e.type === 'python-diagnostic').length;
   const recovered = await diagnostics.load(item.id);
   assert.equal(recovered.success,true,recovered.output);
+  assert.equal(events.filter(e => e.type === 'python-diagnostic').length,noticeCount,'explicit reload interruptions must not trigger background analysis');
   assert.doesNotMatch(recovered.output,/ZeroDivisionError/);
   python.write(item.id,'1 / 0\r');
   await waitFor(() => events.some(e => e.type === 'python-diagnostic' && /<stdin>/.test(e.diagnostic.output)));

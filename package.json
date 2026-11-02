@@ -10,7 +10,7 @@
     "dev": "node scripts/dev.mjs",
     "build": "tsc --noEmit && vite build",
     "start": "npm run build && electron .",
-    "test": "node --test --test-isolation=none tests/core.test.cjs tests/inline-diagnostics.test.cjs",
+    "test": "node --test --test-isolation=none tests/core.test.cjs tests/inline-diagnostics.test.cjs tests/python-environments.test.cjs tests/pip-installer.test.cjs",
     "test:electron": "npm run build && electron tests/electron-smoke.cjs",
     "check": "tsc --noEmit",
     "postinstall": "node scripts/prepare-pty.cjs",

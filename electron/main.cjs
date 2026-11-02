@@ -3,6 +3,8 @@ const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
 const { Workspace } = require('./workspace.cjs');
+const { PythonEnvironments } = require('./python-environments.cjs');
+const { PipInstaller } = require('./pip-installer.cjs');
 const { WorkspaceServices } = require('./workspace-services.cjs');
 const { restoreWindowState, trackWindowState } = require('./window-state.cjs');
 const root = path.resolve(__dirname, '..');
@@ -20,21 +22,42 @@ app.whenReady().then(async () => {
   nativeTheme.themeSource = 'light';
   workspace = new Workspace(env('WORKSPACE') || (app.isPackaged ? path.join(app.getPath('userData'),'workspace') : path.join(root,'workspace')), app.getPath('userData'), env('WORKSPACE'));
   await workspace.init(); store = workspace.store;
+  const environments = new PythonEnvironments(app.getPath('userData'));
+  await environments.init();
+  const installer = new PipInstaller(emit);
+  function requireInstallerIdle() {
+    if (installer.busy) throw new Error('パッケージのインストールが完了するか、中止してから切り替えてください。');
+  }
   function startServices() {
     services = new WorkspaceServices(store,emit,{
-      pythonExecutable:env('PYTHON') || (process.platform === 'win32' ? 'python' : 'python3'),
+      pythonExecutable:environments.current(store.root).executable,
       codexExecutable:env('CODEX') || 'codex'
     });
   }
   startServices();
   async function closeWindow() {
     const closingWindow = win;
-    serviceTransition = serviceTransition.then(() => services.close());
+    serviceTransition = serviceTransition.then(() => Promise.all([installer.close(),services.close()]));
     await serviceTransition;
     if (win === closingWindow && !closingWindow.isDestroyed()) {
       closeAllowed = true;
       closingWindow.close();
     }
+  }
+  function selectEnvironment(folder,executable) {
+    const transition = serviceTransition.then(async () => {
+      requireInstallerIdle();
+      if (store.root !== folder) throw new Error('フォルダーが変更されました。Python環境を選択し直してください。');
+      const previous = environments.current(folder);
+      const current = await environments.select(folder,executable);
+      if (previous.selected !== current.selected) {
+        await services.replacePython(current.executable);
+        emit({ type:'python-environment-changed',environment:current });
+      }
+      return current;
+    });
+    serviceTransition = transition.then(() => {},() => {});
+    return transition;
   }
   const handlers = {
     'problems:list': () => store.list(),
@@ -42,12 +65,33 @@ app.whenReady().then(async () => {
     'problems:open': (_, id) => store.open(id),
     'problems:save': (_, id, code) => store.save(id, code),
     'workspace:info': () => workspace.info(),
+    'pip:status': () => installer.snapshot(),
+    'pip:install': (_, folder, executable, name) => {
+      const current = environments.current(store.root);
+      if (folder !== current.folder || executable !== current.executable) throw new Error('Python環境が変更されました。ダイアログを開き直してください。');
+      return installer.start(current,name);
+    },
+    'pip:cancel': (_, id) => installer.cancel(id),
+    'python:environment': () => environments.current(store.root),
+    'python:environments': () => environments.list(store.root),
+    'python:select-environment': (_, folder, executable) => selectEnvironment(folder,executable),
+    'python:choose-environment': async () => {
+      const folder = store.root;
+      const result = await dialog.showOpenDialog(win,{
+        title:'Python実行ファイルを選択',defaultPath:environments.current(folder).selected || folder,
+        properties:['openFile','showHiddenFiles'],...(process.platform === 'win32' ? { filters:[{ name:'Python',extensions:['exe'] }] } : {})
+      });
+      if (result.canceled || !result.filePaths[0]) return null;
+      return selectEnvironment(folder,result.filePaths[0]);
+    },
     'workspace:choose': async () => {
+      requireInstallerIdle();
       const result = await dialog.showOpenDialog(win,{ title:'Pythonファイルのフォルダーを選択', defaultPath:store.root, properties:['openDirectory','createDirectory'] });
       if (result.canceled || !result.filePaths[0] || !win || win.isDestroyed()) return null;
       // Serialize switches, including requests made while a native dialog is open.
       const previousTransition = serviceTransition;
       const transition = previousTransition.then(async () => {
+        requireInstallerIdle();
         const previous = store.root;
         const info = await workspace.setFolder(result.filePaths[0]);
         if (info.path === previous) return null;
@@ -104,7 +148,7 @@ app.whenReady().then(async () => {
     });
     if (env('DEV_URL')) win.loadURL(env('DEV_URL')); else win.loadFile(path.join(root,'dist/index.html'));
     win.on('closed', () => {
-      serviceTransition = serviceTransition.then(() => services.close());
+      serviceTransition = serviceTransition.then(() => Promise.all([installer.close(),services.close()]));
       win = null;
     });
   }

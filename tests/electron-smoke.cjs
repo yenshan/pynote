@@ -11,6 +11,28 @@ process.env.PYNOTE_RUNTIME = path.join(temporary,'runtime');
 fs.mkdirSync(process.env.PYNOTE_WORKSPACE);
 const source = '# Python practice\ndef solution(n):\n    return sum(x for x in range(n) if x % 3 == 0 or x % 5 == 0)\n';
 fs.writeFileSync(path.join(process.env.PYNOTE_WORKSPACE,'solution.py'),source);
+const { execFileSync } = require('node:child_process');
+const pythonCommand = process.env.PYNOTE_PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
+const venv = path.join(temporary,'test venv');
+execFileSync(pythonCommand,['-m','venv','--without-pip',venv]);
+const venvPython = path.join(venv,process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
+const venvSite = execFileSync(venvPython,['-c','import sysconfig; print(sysconfig.get_path("purelib"))'],{ encoding:'utf8' }).trim();
+const pipRecord = path.join(temporary,'pip-invocation.json');
+// GUI tests use a local pip fixture; the unit suite installs a real wheel offline.
+fs.writeFileSync(path.join(venvSite,'pip.py'),`
+import json, sys, time
+with open(${JSON.stringify(pipRecord)}, 'w') as record:
+    json.dump({'executable': sys.executable, 'args': sys.argv[1:]}, record)
+print('Collecting ' + sys.argv[-1], flush=True)
+time.sleep(0.5)
+print('Successfully installed ' + sys.argv[-1], flush=True)
+`);
+
+process.env.JUPYTER_PATH = path.join(temporary,'jupyter');
+const kernelDirectory = path.join(process.env.JUPYTER_PATH,'kernels','pynote-test');
+fs.mkdirSync(kernelDirectory,{ recursive:true });
+fs.writeFileSync(path.join(kernelDirectory,'kernel.json'),JSON.stringify({ language:'python',display_name:'PyNote test venv',argv:[venvPython,'-m','ipykernel_launcher','-f','{connection_file}'] }));
+
 const script = path.join(temporary,'fake-codex.cjs');
 fs.writeFileSync(script,`#!/usr/bin/env node
 const send = message => process.stdout.write(JSON.stringify(message)+'\\n');
@@ -37,7 +59,7 @@ function finish(error) {
   if (finished) return;
   finished = true; clearTimeout(timeout);
   if (error) console.error(error);
-  else console.log('Electron smoke passed: Python editor, save/run shortcuts, live REPL, rerun, inline AI errors, file switching, terminal layout and folder lifecycle.');
+  else console.log('Electron smoke passed: Python editor, save/run shortcuts, live REPL, rerun, inline AI errors, file switching, terminal layout, Jupyter environments, executable picker, package installation and folder lifecycle.');
   app.exit(error ? 1 : 0);
 }
 app.on('browser-window-created',(_,win) => {
@@ -57,10 +79,10 @@ app.on('browser-window-created',(_,win) => {
       win.webContents.sendInputEvent({ type:'keyUp',keyCode,modifiers });
     };
     const mod = process.platform === 'darwin' ? 'meta' : 'control';
-    const run = () => key('Enter',[mod]);
+    const run = async () => { key('Enter',[mod]); await pause(80); };
     async function edit(code) {
       await evaluate(`document.querySelector('.cm-content').focus()`);
-      key('A',[mod]); await win.webContents.insertText(code);
+      key('A',[mod]); await pause(40); await win.webContents.insertText(code); await pause(40);
     }
     try {
       await until(`document.querySelector('.cm-content') && document.querySelector('.xterm')`);
@@ -74,21 +96,62 @@ app.on('browser-window-created',(_,win) => {
       key('S',[mod]);
       await until(`!document.querySelector('.dirty-dot')`);
       assert.match(fs.readFileSync(item.id,'utf8'),/saved by shortcut/);
-      run();
+      await run();
       await until(`!document.querySelector('.load-button').disabled && document.querySelector('.run-button').textContent.includes('再実行')`);
       await evaluate(`window.kata.pythonWrite(${id},'solution(10)\\r')`);
       await until(`window.kata.pythonSnapshot(${id}).then(s => /23[\\r\\n]/.test(s?.data || ''))`);
+      // The Jupyter row selects a venv, closes old sessions and keeps unsaved code.
+      await edit(source+'# environment switch preserves unsaved code\n');
+      await evaluate(`document.querySelector('[aria-label="Python環境を選択"]').click()`);
+      await until(`Array.from(document.querySelectorAll('.environment-option')).some(row => row.textContent.includes('PyNote test venv') && !row.disabled)`);
+      await evaluate(`Array.from(document.querySelectorAll('.environment-option')).find(row => row.textContent.includes('PyNote test venv')).click()`);
+      await until(`!document.querySelector('.python-environment-modal')`);
+      assert.equal((await evaluate('window.kata.pythonEnvironment()')).selected,venvPython);
+      assert.equal(await evaluate(`window.kata.pythonSnapshot(${id})`),null);
+      assert.ok(await evaluate(`document.querySelector('.dirty-dot') && document.querySelector('.cm-content').textContent.includes('environment switch preserves')`));
+      await evaluate(`document.querySelector('.cm-content').focus()`); await run();
+      await until(`!document.querySelector('.load-button').disabled`);
+      await evaluate(`window.kata.pythonWrite(${id},'import sys; print(sys.prefix)\\r')`);
+      await until(`window.kata.pythonSnapshot(${id}).then(s => s?.data.includes(${JSON.stringify(venv)}))`);
+      // Exercise cancellation and the native executable picker without opening a dialog.
+      const { dialog:environmentDialog } = require('electron');
+      const originalEnvironmentDialog = environmentDialog.showOpenDialog;
+      await evaluate(`document.querySelector('[aria-label="Python環境を選択"]').click()`);
+      try {
+        environmentDialog.showOpenDialog = async () => ({ canceled:true,filePaths:[] });
+        await evaluate(`Array.from(document.querySelectorAll('.environment-path button')).find(b => b.textContent.includes('参照')).click()`);
+        await until(`!document.querySelector('.environment-path button').disabled`);
+        assert.equal((await evaluate('window.kata.pythonEnvironment()')).selected,venvPython);
+        environmentDialog.showOpenDialog = async () => ({ canceled:false,filePaths:[venvPython] });
+        await evaluate(`Array.from(document.querySelectorAll('.environment-path button')).find(b => b.textContent.includes('参照')).click()`);
+        await until(`!document.querySelector('.python-environment-modal')`);
+      } finally { environmentDialog.showOpenDialog = originalEnvironmentDialog; }
+      // One package-name field installs into the selected environment and streams output.
+      await evaluate(`document.querySelector('[aria-label="パッケージをインストール"]').click()`);
+      await until(`document.querySelector('.pip-install-modal[open]')`);
+      assert.equal(await evaluate(`document.querySelectorAll('.pip-install-modal input').length`),1);
+      await evaluate(`document.querySelector('#pip-package-name').focus()`);
+      await win.webContents.insertText('numpy');
+      await evaluate(`document.querySelector('.pip-install-modal form').requestSubmit()`);
+      await until(`document.querySelector('.pip-install-output')?.textContent.includes('Collecting numpy')`);
+      assert.ok(await evaluate(`document.querySelector('[aria-label="Python環境を選択"]').disabled && document.querySelector('[aria-label="フォルダー設定"]').disabled`));
+      await until(`document.querySelector('.pip-install-result [role="status"]')?.textContent.includes('インストール完了')`);
+      const pipInvocation = JSON.parse(fs.readFileSync(pipRecord,'utf8'));
+      assert.equal(pipInvocation.executable,venvPython);
+      assert.deepEqual(pipInvocation.args,['install','--disable-pip-version-check','--no-input','--','numpy']);
+      await evaluate(`document.querySelector('[aria-label="インストールダイアログを閉じる"]').click()`);
+      await until(`!document.querySelector('[aria-label="Python環境を選択"]').disabled`);
       // Moving the terminal preserves its instance and live interpreter.
       await evaluate(`window.smokeTerminal = document.querySelector('.xterm'); document.querySelector('[aria-label="Pythonをエディタの右に移動"]').click()`);
       assert.ok(await evaluate(`window.smokeTerminal === document.querySelector('.xterm')`));
       await until(`document.querySelector('.python-at-side')`);
       await evaluate(`document.querySelector('[aria-label="Pythonをエディタの下に移動"]').click()`);
-      await edit('value = 42\nprint(value)\n'); run();
+      await edit('value = 42\nprint(value)\n'); await run();
       await until(`!document.querySelector('.load-button').disabled`);
       await evaluate(`window.kata.pythonWrite(${id},'value + 1\\r')`);
       await until(`window.kata.pythonSnapshot(${id}).then(s => /43[\\r\\n]/.test(s?.data || ''))`);
       const chatBefore = await evaluate(`document.querySelector('.chat-area').textContent`);
-      await edit('# error example\nvalue = 1 / 0\n'); run();
+      await edit('# error example\nvalue = 1 / 0\n'); await run();
       await until(`document.querySelector('.cm-inline-diagnostic')?.textContent.includes('ゼロ')`);
       assert.equal(await evaluate(`document.querySelector('.cm-ai-error-range').textContent`),'1 / 0');
       assert.equal(await evaluate(`document.querySelector('.chat-area').textContent`),chatBefore);
@@ -97,7 +160,7 @@ app.on('browser-window-created',(_,win) => {
       fs.writeFileSync(path.join(artifacts,'python-ide.png'),(await win.webContents.capturePage()).toPNG());
       key('S',[mod]);
       await until(`!document.querySelector('.cm-inline-diagnostic')`);
-      await edit('value = 42\n'); run();
+      await edit('value = 42\n'); await run();
       await until(`!document.querySelector('.load-button').disabled && !document.querySelector('.python-status-popup')`);
       await evaluate(`document.querySelector('.new-button').click()`);
       await until(`document.querySelector('.new-modal')`);
@@ -118,6 +181,11 @@ app.on('browser-window-created',(_,win) => {
         await evaluate(`document.querySelector('[aria-label="フォルダー設定"]').click()`);
         await until(`document.querySelector('.editor-tab').textContent.includes('other.py')`);
         assert.equal((await evaluate('window.kata.workspaceInfo()')).path,fs.realpathSync(nextFolder));
+        assert.equal((await evaluate('window.kata.pythonEnvironment()')).selected,null);
+        dialog.showOpenDialog = async () => ({ canceled:false,filePaths:[process.env.PYNOTE_WORKSPACE] });
+        await evaluate(`document.querySelector('[aria-label="フォルダー設定"]').click()`);
+        await until(`document.querySelector('.editor-tab').textContent.includes('Untitled.py')`);
+        assert.equal((await evaluate('window.kata.pythonEnvironment()')).selected,venvPython);
       } finally { dialog.showOpenDialog = original; }
       finish();
     } catch (error) {

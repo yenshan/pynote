@@ -9,9 +9,9 @@ class WorkspaceServices {
     this.store = store;
     this.active = true;
     this.emit = event => { if (this.active) emit(event); };
-    this.python = new (options.Python || Python)(this.emit, options.pythonExecutable || (process.platform === 'win32' ? 'python' : 'python3'));
+    this.options = options;
+    this.startPython(options.pythonExecutable || (process.platform === 'win32' ? 'python' : 'python3'));
     this.codex = new (options.Codex || Codex)(store, this.emit, options.codexExecutable || 'codex');
-    this.diagnostics = new (options.PythonDiagnostics || PythonDiagnostics)(store, this.python);
     try {
       this.watcher = (options.watch || fs.watch)(store.root, (_, name) => {
         if (!this.active || (name && !/\.py$/i.test(name.toString()))) return;
@@ -20,6 +20,20 @@ class WorkspaceServices {
       });
       this.watcher.on('error', error => this.emit({ type:'notice', message:`フォルダーの監視に失敗しました: ${error.message}` }));
     } catch (error) { this.emit({ type:'notice', message:error.message }); }
+  }
+  startPython(executable) {
+    const generation = this.pythonGeneration = (this.pythonGeneration || 0)+1;
+    this.python = new (this.options.Python || Python)(event => {
+      if (this.pythonGeneration === generation) this.emit(event);
+    },executable);
+    this.diagnostics = new (this.options.PythonDiagnostics || PythonDiagnostics)(this.store,this.python);
+  }
+  async replacePython(executable) {
+    this.pythonGeneration++;
+    this.diagnostics.close();
+    await this.python.close();
+    if (!this.active) throw new Error('ワークスペースを終了しています。');
+    this.startPython(executable);
   }
   close() {
     if (this.closing) return this.closing;

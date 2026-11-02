@@ -104,7 +104,9 @@ _builtins.__kata_run__()
     if (!hasDiagnostic(output)) return;
     session.diagnosticBuffer='';
     session.lastDiagnostic = { output,at:new Date().toISOString() };
-    this.emit({ type:'python-diagnostic',id:session.id,diagnostic:session.lastDiagnostic });
+    // Explicit loads return their own report; their Ctrl+C must not trigger
+    // a second asynchronous analysis after the new run has already completed.
+    if (!session.loading) this.emit({ type:'python-diagnostic',id:session.id,diagnostic:session.lastDiagnostic });
   }
   write(id,data) {
     const session=this.sessions.get(id);

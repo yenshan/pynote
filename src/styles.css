@@ -242,3 +242,38 @@ button svg{vertical-align:middle}
 .python-status-message{flex:1;min-width:0}
 .python-status-message p{margin:8px 0 0}
 .python-status-popup>.icon-button{margin:-2px -4px 0 0}
+
+.python-environment-button{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:10px 16px;text-align:left;color:var(--text-muted)}
+.python-environment-button:hover{background:var(--surface-hover)}
+.python-environment-button>span{min-width:0;display:grid;gap:4px}
+.python-environment-button strong{font-size:11px;font-weight:500}
+.python-environment-button small{font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.python-environment-modal{width:min(680px,calc(100vw - 48px));max-height:85vh;overflow:auto;padding:28px}
+.python-environment-modal::backdrop{background:#69756138;backdrop-filter:blur(6px)}
+.python-environment-modal p{font-size:12px;line-height:1.8;color:var(--text-muted);overflow-wrap:anywhere}
+.environment-list-heading{display:flex;align-items:center;justify-content:space-between;font-size:12px;margin:18px 0 10px;gap:12px}
+.environment-options{max-height:34vh;overflow:auto;border:1px solid var(--border);border-radius:6px}
+.environment-option{display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left;gap:12px;padding:12px;border-bottom:1px solid var(--border)}
+.environment-option:last-child{border-bottom:0}
+.environment-option:hover,.environment-option.selected{background:var(--surface-hover)}
+.environment-option>span{display:grid;gap:5px;min-width:0}
+.environment-option strong{font-size:12px;font-weight:500}
+.environment-option small{font-size:10px;color:var(--text-muted);overflow-wrap:anywhere}
+.environment-option:disabled{opacity:.65;cursor:default}
+.environment-error{color:#a04432!important}
+.python-environment-modal form{margin-top:20px}
+.python-environment-modal label{font-size:12px}
+.environment-path{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.environment-path input{flex:1;min-width:160px;padding:9px;border:1px solid var(--border-strong);border-radius:5px;background:var(--surface);font-size:12px}
+
+.pip-install-button{display:flex;align-items:center;gap:8px;width:100%;padding:7px 16px 12px;font-size:11px;color:var(--text-muted);text-align:left}
+.pip-install-button:hover{background:var(--surface-hover)}
+.pip-install-modal{width:min(600px,calc(100vw - 48px));max-height:85vh;overflow:auto;padding:28px}
+.pip-install-modal::backdrop{background:#69756138;backdrop-filter:blur(6px)}
+.pip-install-modal p{font-size:12px;line-height:1.8;color:var(--text-muted);overflow-wrap:anywhere}
+.pip-install-target{display:grid;gap:7px;padding:12px;background:var(--surface-muted);border:1px solid var(--border);border-radius:5px;margin:16px 0}
+.pip-install-target span,.pip-install-modal label{font-size:11px;color:var(--text-muted)}
+.pip-install-target code{font-size:11px;overflow-wrap:anywhere}
+.pip-install-modal input{display:block;width:100%;margin-top:8px;padding:10px;border:1px solid var(--border-strong);border-radius:5px;background:var(--surface);font-size:13px}
+.pip-install-modal .modal-actions{margin-top:14px}
+.pip-install-output{white-space:pre-wrap;overflow-wrap:anywhere;max-height:30vh;overflow:auto;padding:12px;border:1px solid var(--border);border-radius:5px;background:var(--surface-muted);font:11px/1.7 monospace}

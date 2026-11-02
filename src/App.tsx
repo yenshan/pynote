@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Plus, Search, ChevronDown, Check, Circle, Command, FolderOpen, Loader2, PanelLeftClose, PanelLeftOpen, Play, RotateCcw, Save, Sparkles, Terminal, X, CheckCheck, Type, PanelBottom, PanelRight } from 'lucide-react';
 import { AssistantPanel } from './AssistantPanel';
 import { Editor } from './Editor';
+import { PipInstallDialog } from './PipInstallDialog';
+import { PythonEnvironmentPicker } from './PythonEnvironmentPicker';
 import { PythonTerminal, type TerminalHandle } from './PythonTerminal';
 import { SidebarResizer } from './SidebarResizer';
 import { FontSettings } from './FontSettings';
@@ -34,13 +36,14 @@ function initialAssistantOpen() {
 
 export function App() {
   const [toast,setToast] = useState('');
+  const [pipBusy,setPipBusy] = useState(false);
   const notify = useCallback((error:unknown) => setToast(error instanceof Error ? error.message.replace(/^Error invoking remote method '[^']+': Error: /,'') : String(error)), []);
   const terminalRef = useRef<TerminalHandle>(null);
   const workspace = useWorkspace(notify);
   const { items,problem,code,dirty,saving,folder,choosingFolder,loading,open,changeCode } = workspace;
   const assistant = useAssistant(workspace,notify);
   const { model,effort,aiBusy } = assistant;
-  const { diagnostics,busy,loads,dead,generation,run,clearLoadMessages,setAlive } = usePython(workspace,terminalRef,model,effort);
+  const { sessionEpoch,diagnostics,busy,loads,dead,generation,run,clearLoadMessages,setAlive } = usePython(workspace,terminalRef,model,effort);
   const save = useCallback(async () => {
     const target = workspace.documentRef.current.problem?.id;
     const epoch = workspace.folderEpoch.current;
@@ -171,7 +174,9 @@ export function App() {
       <aside className={`sidebar ${left ? '' : 'collapsed'}`} id="file-sidebar" aria-label="ファイルサイドバー" style={{ width:leftWidth }}>
         <div className="sidebar-heading"><span hidden={!left}>FILES</span><button className="icon-button" title={left ? 'サイドバーを閉じる' : 'サイドバーを開く'} aria-label={left ? 'サイドバーを閉じる' : 'サイドバーを開く'} aria-expanded={left} aria-controls="file-sidebar-content" onClick={() => setLeft(!left)}>{left ? <PanelLeftClose size={15}/> : <PanelLeftOpen size={15}/>}</button></div>
         <div className="sidebar-content" id="file-sidebar-content" hidden={!left}>
-        <button className="folder-setting" aria-label="フォルダー設定" title={folder?.path || 'フォルダーを選択'} disabled={choosingFolder} onClick={() => void chooseFolder()}>{choosingFolder?<Loader2 className="spin" size={15}/>:<FolderOpen size={15}/>}<span><strong>{folder?.name || 'フォルダーを設定'}</strong><small>{folder?.path || '.py ファイルの保存先を選択'}</small></span><ChevronDown size={12}/></button>
+        <button className="folder-setting" aria-label="フォルダー設定" title={folder?.path || 'フォルダーを選択'} disabled={choosingFolder || pipBusy} onClick={() => void chooseFolder()}>{choosingFolder?<Loader2 className="spin" size={15}/>:<FolderOpen size={15}/>}<span><strong>{folder?.name || 'フォルダーを設定'}</strong><small>{folder?.path || '.py ファイルの保存先を選択'}</small></span><ChevronDown size={12}/></button>
+        <PythonEnvironmentPicker folder={folder?.path || ''} disabled={choosingFolder || pipBusy || Object.values(busy).some(Boolean)} onError={notify}/>
+        <PipInstallDialog folder={folder?.path || ''} disabled={choosingFolder} onBusyChange={setPipBusy}/>
         <button className="new-button" onClick={() => setNewOpen(true)}><Plus size={16}/><span>新しいファイル</span><kbd>⌘ N</kbd></button>
         <label className="search-box"><Search size={14}/><input aria-label="ファイルを検索" placeholder="ファイルを検索…" value={query} onChange={e => setQuery(e.target.value)}/>{query && <button className="icon-button" aria-label="検索をクリア" onClick={() => setQuery('')}><X size={12}/></button>}</label>
         <div className="problem-list">{filtered.map(item => <button key={item.id} title={item.fileName} data-problem-id={item.id} aria-current={item.id===id?'page':undefined} onClick={() => void open(item.id)} className={`problem-item ${item.id===id?'selected':''}`}><span className="file-name">{item.fileName}</span><time className="file-date" dateTime={item.updatedAt} title="更新日">{fileDate(item.updatedAt)}</time></button>)}{!filtered.length && <div className="list-empty">ファイルが見つかりません</div>}</div>
@@ -192,7 +197,7 @@ export function App() {
             <div className="lower-header"><h2 id="python-heading"><Terminal size={13}/>Python</h2>
               <div className="python-tools"><button className="icon-button" aria-label={pythonSide ? 'Pythonをエディタの下に移動' : 'Pythonをエディタの右に移動'} title={pythonSide ? 'Pythonをエディタの下に移動' : 'Pythonをエディタの右に移動'} onClick={() => setPythonSide(!pythonSide)}>{pythonSide ? <PanelBottom size={14}/> : <PanelRight size={14}/>}</button>{lastError && <button className="ask-error-button" aria-label="Pythonのエラーを解析" title="Pythonのエラーを裏でAI解析 (Ctrl-J → e)" disabled={busy[id]} onClick={() => void run(false,id)}><Sparkles size={12}/><span>エラーを解析</span></button>}<button className="run-button" title="Pythonを起動して実行／再実行・エラーをAI解析 (⌘Enter)" disabled={busy[id]} onClick={() => void run()}>{busy[id]?<Loader2 className="spin" size={12}/>:<Play size={11} fill="currentColor"/>}<span>{dead[id] === false ? '再実行' : '実行'}</span><kbd>⌘ ↵</kbd></button><button title="Pythonを再起動" className="icon-button" disabled={busy[id]} onClick={() => void run(true)}><RotateCcw size={13}/></button></div>
             </div>
-            <PythonTerminal ref={terminalRef} id={id} generation={generation[id] || 0} onError={notify} onState={alive => setAlive(id,alive)}/>
+            <PythonTerminal key={`${id}:${sessionEpoch}`} ref={terminalRef} id={id} generation={generation[id] || 0} onError={notify} onState={alive => setAlive(id,alive)}/>
           </section>
         </div></> : <div className="workspace-empty"><Logo/><h2>{loading?'ワークスペースを読み込み中…':'.py ファイルを選択するか、新しく作成してください。'}</h2><button className="new-button" onClick={() => setNewOpen(true)}><Plus size={16}/>新しいファイル</button></div>}
       </main>
