@@ -1,0 +1,20 @@
+node_modules/
+dist/
+release/
+.runtime/
+workspace/
+*.log
+.DS_Store
+
+# Local reference project and machine-specific configuration
+/haskell_ide
+/.agents/
+/.aws/
+/.codex/
+/artifacts/
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.venv/
